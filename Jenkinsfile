@@ -2,6 +2,7 @@ pipeline{
     agent any
     tools {
         terraform 'terraform'
+        terraform 'ansible'
     }
 
     environment {
@@ -69,6 +70,7 @@ pipeline{
                 sh 'docker push "$ECR_REGISTRY/$APP_REPO_NAME:react"'
             }
         }
+
         stage('wait the instance') {
             steps {
                 script {
@@ -78,6 +80,7 @@ pipeline{
                 }
             }
         }
+
         stage('Deploy the App') {
             steps {
                 echo 'Deploy the App'
@@ -87,4 +90,41 @@ pipeline{
                 ansiblePlaybook credentialsId: 'rizgar', disableHostKeyChecking: true, installation: 'ansible', inventory: 'inventory_aws_ec2.yml', playbook: 'docker_project.yml'
              }
         }
+
+        stage('Destroy the infrastructure'){
+            steps{
+                timeout(time:5, unit:'DAYS'){
+                    input message:'Approve terminate'
+                }
+                sh """
+                docker image prune -af
+                terraform destroy --auto-approve
+                aws ecr delete-repository \
+                  --repository-name ${APP_REPO_NAME} \
+                  --region ${AWS_REGION} \
+                  --force
+                """
+            }
+        }
+
     }
+
+    post {
+        always {
+            echo 'Deleting all local images'
+            sh 'docker image prune -af'
+        }
+        failure {
+
+            echo 'Delete the Image Repository on ECR due to the Failure'
+            sh """
+                aws ecr delete-repository \
+                  --repository-name ${APP_REPO_NAME} \
+                  --region ${AWS_REGION}\
+                  --force
+                """
+            echo 'Deleting Terraform Stack due to the Failure'
+                sh 'terraform destroy --auto-approve'
+        }
+    }
+}

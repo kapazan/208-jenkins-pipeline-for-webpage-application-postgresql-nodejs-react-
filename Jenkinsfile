@@ -87,3 +87,4 @@ pipeline{
                 ansiblePlaybook credentialsId: 'rizgar', disableHostKeyChecking: true, installation: 'ansible', inventory: 'inventory_aws_ec2.yml', playbook: 'docker_project.yml'
              }
         }
+    }
